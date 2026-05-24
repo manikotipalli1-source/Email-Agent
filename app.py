@@ -5,6 +5,9 @@ import pickle
 import os
 import json
 from datetime import datetime
+from flask_mail import Mail, Message
+from itsdangerous import URLSafeTimedSerializer
+import os
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key_here'
@@ -13,6 +16,17 @@ app.secret_key = 'your_secret_key_here'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///emailagent.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+
+# Mail configuration
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME')
+
+mail = Mail(app)
+s = URLSafeTimedSerializer(app.secret_key)
 
 # Load trained model
 model = pickle.load(open('email_model.pkl', 'rb'))
@@ -101,6 +115,37 @@ def activity():
         for e in kept[-10:]:
             emails.append({'subject': e['subject'], 'sender': e['sender'], 'label': 'Kept'})
     return jsonify({'emails': emails})
+
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        email = request.form['email']
+        user = User.query.filter_by(email=email).first()
+        if user:
+            token = s.dumps(email, salt='password-reset')
+            reset_url = url_for('reset_password', token=token, _external=True)
+            msg = Message('Reset your Email Agent password', recipients=[email])
+            msg.body = f'Click this link to reset your password: {reset_url}\n\nThis link expires in 1 hour.'
+            mail.send(msg)
+        return render_template('forgot_password.html', sent=True)
+    return render_template('forgot_password.html', sent=False)
+
+@app.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    try:
+        email = s.loads(token, salt='password-reset', max_age=3600)
+    except:
+        return render_template('reset_password.html', error='Link expired or invalid.')
+    if request.method == 'POST':
+        password = request.form['password']
+        confirm = request.form['confirm_password']
+        if password != confirm:
+            return render_template('reset_password.html', error='Passwords do not match.')
+        user = User.query.filter_by(email=email).first()
+        user.password = generate_password_hash(password)
+        db.session.commit()
+        return redirect(url_for('login'))
+    return render_template('reset_password.html', error=None)
 
 if __name__ == '__main__':
     with app.app_context():
