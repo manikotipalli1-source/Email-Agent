@@ -1,0 +1,132 @@
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+import json
+import os
+import requests
+import schedule
+import time
+from datetime import datetime
+
+SCOPES = ['https://mail.google.com/']
+
+# Whitelist - add senders you always want to keep
+WHITELIST = [
+    # Add emails here like: 'important@example.com'
+]
+
+def authenticate_gmail():
+    creds = None
+    if os.path.exists('token.json'):
+        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+    if not creds or not creds.valid:
+        flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
+        creds = flow.run_local_server(port=0)
+        with open('token.json', 'w') as token:
+            token.write(creds.to_json())
+    return build('gmail', 'v1', credentials=creds)
+
+def get_emails(service, max_results=500):
+    results = service.users().messages().list(userId='me', maxResults=max_results).execute()
+    messages = results.get('messages', [])
+    emails = []
+    for message in messages:
+        msg = service.users().messages().get(userId='me', id=message['id'], format='full').execute()
+        headers = msg['payload']['headers']
+        subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
+        sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown')
+        snippet = msg.get('snippet', '')
+        emails.append({
+            'id': message['id'],
+            'subject': subject,
+            'sender': sender,
+            'snippet': snippet
+        })
+    return emails
+
+def is_whitelisted(sender):
+    for whitelisted in WHITELIST:
+        if whitelisted.lower() in sender.lower():
+            return True
+    return False
+
+def classify_email(subject, sender, snippet):
+    prompt = f"""Classify this email as 'junk' or 'keep'.
+Keep if: security alerts, educational, deployment logs, important notifications, transactional emails.
+Mark junk if: promotions, newsletters, marketing, ads, social media updates.
+Subject: {subject}
+From: {sender}
+Preview: {snippet}
+Answer only with 'junk' or 'keep'."""
+
+    response = requests.post('http://localhost:11434/api/generate', json={
+        'model': 'mistral',
+        'prompt': prompt,
+        'stream': False
+    })
+    result = response.json()['response'].strip().lower()
+    return 'junk' in result
+
+def save_deleted_email(subject, sender, snippet):
+    data = []
+    if os.path.exists('deleted_emails.json'):
+        with open('deleted_emails.json', 'r') as f:
+            data = json.load(f)
+    data.append({
+        'subject': subject,
+        'sender': sender,
+        'snippet': snippet,
+        'deleted_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    })
+    with open('deleted_emails.json', 'w') as f:
+        json.dump(data, f, indent=2)
+
+def delete_email(service, email_id):
+    service.users().messages().trash(userId='me', id=email_id).execute()
+
+def cleanup_inbox(service):
+    print(f"\n Starting inbox cleanup at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    emails = get_emails(service)
+    print(f"Found {len(emails)} emails to process...")
+    
+    deleted = 0
+    kept = 0
+    
+    for email in emails:
+        # Check whitelist first
+        if is_whitelisted(email['sender']):
+            print(f"Whitelisted - Kept: {email['subject']}")
+            kept += 1
+            continue
+        
+        # Classify with AI
+        is_junk = classify_email(email['subject'], email['sender'], email['snippet'])
+        
+        if is_junk:
+            delete_email(service, email['id'])
+            save_deleted_email(email['subject'], email['sender'], email['snippet'])
+            print(f"Deleted: {email['subject']}")
+            deleted += 1
+        else:
+            print(f"Kept: {email['subject']}")
+            kept += 1
+    
+    print(f"\nCleanup complete. Deleted: {deleted}, Kept: {kept}")
+
+def main():
+    service = authenticate_gmail()
+    print("Gmail authenticated successfully!")
+    
+    # Run cleanup immediately on start
+    cleanup_inbox(service)
+    
+    # Schedule daily cleanup at 8am
+    schedule.every().day.at("08:00").do(cleanup_inbox, service)
+    
+    print("\nScheduler running. Next cleanup at 8:00 AM daily.")
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
+
+main()

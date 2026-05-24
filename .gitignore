@@ -1,0 +1,9 @@
+spam_Emails_data.csv
+email_model.pkl
+token.json
+credentials.json
+deleted_emails.json
+kept_emails.json
+last_cleanup.json
+__pycache__/
+*.pyc
