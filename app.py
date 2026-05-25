@@ -109,7 +109,7 @@ def activity():
             emails.append({'subject': e['subject'], 'sender': e['sender'], 'label': 'Kept'})
     return jsonify({'emails': emails})
 
-@app.route('/forgot-password', methods=['GET', 'POST'])
+@app.route('/forgot_password', methods=['GET', 'POST'])
 def forgot_password():
     if request.method == 'POST':
         email = request.form['email']
