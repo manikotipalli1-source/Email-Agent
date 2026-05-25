@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Agent - Settings</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Space Grotesk', sans-serif; }
+        .gradient-bg { background: linear-gradient(135deg, #0f0c29, #302b63, #24243e); }
+        .card-glow { box-shadow: 0 0 40px rgba(99, 102, 241, 0.15); }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+
+    <!-- Navbar -->
+    <nav class="border-b border-white border-opacity-10 px-6 py-4">
+        <div class="max-w-6xl mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                    </svg>
+                </div>
+                <span class="font-bold text-lg">Email Agent</span>
+            </div>
+            <div class="flex items-center gap-4">
+                <a href="/dashboard" class="text-sm bg-white bg-opacity-10 hover:bg-opacity-20 px-4 py-2 rounded-xl transition">Dashboard</a>
+                <a href="/logout" class="text-sm bg-white bg-opacity-10 hover:bg-opacity-20 px-4 py-2 rounded-xl transition">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-4xl mx-auto px-6 py-10">
+        <h1 class="text-2xl font-bold mb-8">Settings</h1>
+
+        <!-- Whitelist Section -->
+        <div class="bg-white bg-opacity-5 border border-white border-opacity-10 rounded-2xl p-8 card-glow mb-6">
+            <h2 class="text-xl font-bold mb-2">Whitelist</h2>
+            <p class="text-indigo-300 text-sm mb-6">Emails from these senders will never be deleted.</p>
+
+            <!-- Add to whitelist -->
+            <form method="POST" class="flex gap-3 mb-6">
+                <input type="hidden" name="action" value="add_whitelist">
+                <input type="text" name="sender" placeholder="e.g. github.com or boss@company.com"
+                    class="flex-1 bg-white bg-opacity-10 border border-white border-opacity-10 text-white placeholder-indigo-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition">
+                <button type="submit"
+                    class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 py-3 rounded-xl transition">
+                    Add
+                </button>
+            </form>
+
+            <!-- Whitelist items -->
+            {% if whitelist %}
+            <div class="space-y-2">
+                {% for sender in whitelist %}
+                <div class="flex items-center justify-between bg-white bg-opacity-5 rounded-xl px-4 py-3">
+                    <span class="text-sm">{{ sender }}</span>
+                    <form method="POST">
+                        <input type="hidden" name="action" value="remove_whitelist">
+                        <input type="hidden" name="sender" value="{{ sender }}">
+                        <button type="submit" class="text-red-400 hover:text-red-300 text-sm transition">Remove</button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-indigo-300 text-sm">No senders whitelisted yet.</p>
+            {% endif %}
+        </div>
+
+        <!-- Max Emails Section -->
+        <div class="bg-white bg-opacity-5 border border-white border-opacity-10 rounded-2xl p-8 card-glow mb-6">
+            <h2 class="text-xl font-bold mb-2">Cleanup Size</h2>
+            <p class="text-indigo-300 text-sm mb-6">How many emails to process per cleanup run.</p>
+            <form method="POST" class="flex gap-3 items-center">
+                <input type="hidden" name="action" value="update_max">
+                <select name="max_emails"
+                    class="bg-white bg-opacity-10 border border-white border-opacity-10 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition">
+                    <option value="25" {% if max_emails == 25 %}selected{% endif %}>25 emails</option>
+                    <option value="50" {% if max_emails == 50 %}selected{% endif %}>50 emails</option>
+                    <option value="100" {% if max_emails == 100 %}selected{% endif %}>100 emails</option>
+                    <option value="200" {% if max_emails == 200 %}selected{% endif %}>200 emails</option>
+                </select>
+                <button type="submit"
+                    class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 py-3 rounded-xl transition">
+                    Save
+                </button>
+            </form>
+        </div>
+
+        <!-- Danger Zone -->
+        <div class="bg-red-500 bg-opacity-10 border border-red-500 border-opacity-30 rounded-2xl p-8">
+            <h2 class="text-xl font-bold mb-2 text-red-300">Danger Zone</h2>
+            <p class="text-red-300 text-sm mb-6">Disconnect your Gmail account from Email Agent.</p>
+            <a href="/disconnect-gmail"
+                class="bg-red-500 hover:bg-red-400 text-white font-semibold px-6 py-3 rounded-xl transition inline-block">
+                Disconnect Gmail
+            </a>
+        </div>
+    </div>
+</body>
+</html>

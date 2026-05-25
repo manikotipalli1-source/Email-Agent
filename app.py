@@ -209,7 +209,7 @@ def run_cleanup():
         print(f"Cleanup error: {e}")
         return jsonify({'error': str(e)}), 500
     
-    
+
 @app.route('/classify', methods=['POST'])
 def classify():
     if 'user_id' not in session:
@@ -304,6 +304,17 @@ def settings():
                          email=session['user_email'],
                          whitelist=whitelist,
                          max_emails=user.max_emails)
+
+@app.route('/disconnect-gmail')
+def disconnect_gmail():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    user = db.session.get(User, session['user_id'])
+    if user:
+        user.gmail_token = None
+        user.gmail_email = None
+        db.session.commit()
+    return redirect(url_for('dashboard'))
 
 if __name__ == '__main__':
     with app.app_context():
