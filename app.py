@@ -5,7 +5,7 @@ import pickle
 import os
 import json
 from datetime import datetime
-from flask_mail import Mail, Message
+import resend
 from itsdangerous import URLSafeTimedSerializer
 import os
 
@@ -18,14 +18,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # Mail configuration
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
-app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
-app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME')
-
-mail = Mail(app)
+resend.api_key = os.environ.get('RESEND_API_KEY')
 s = URLSafeTimedSerializer(app.secret_key)
 
 # Load trained model
@@ -124,9 +117,12 @@ def forgot_password():
         if user:
             token = s.dumps(email, salt='password-reset')
             reset_url = url_for('reset_password', token=token, _external=True)
-            msg = Message('Reset your Email Agent password', recipients=[email])
-            msg.body = f'Click this link to reset your password: {reset_url}\n\nThis link expires in 1 hour.'
-            mail.send(msg)
+            resend.Emails.send({
+                "from": "onboarding@resend.dev",
+                "to": email,
+                "subject": "Reset your Email Agent password",
+                "text": f"Click this link to reset your password: {reset_url}\n\nThis link expires in 1 hour."
+            })
         return render_template('forgot_password.html', sent=True)
     return render_template('forgot_password.html', sent=False)
 
