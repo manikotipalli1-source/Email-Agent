@@ -51,6 +51,8 @@ class User(db.Model):
     password = db.Column(db.String(200), nullable=False)
     gmail_token = db.Column(db.Text, nullable=True)
     gmail_email = db.Column(db.String(150), nullable=True)
+    whitelist = db.Column(db.Text, nullable=True, default='[]')
+    max_emails = db.Column(db.Integer, default=50)
 
 # Routes
 @app.route('/')
@@ -153,10 +155,11 @@ def oauth2callback():
 def run_cleanup():
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
-    user = User.query.get(session['user_id'])
-    if not user.gmail_token:
+    user = db.session.get(User, session['user_id'])
+    if not user or not user.gmail_token:
         return jsonify({'error': 'Gmail not connected'}), 400
     try:
+        whitelist = json.loads(user.whitelist or '[]')
         token_data = json.loads(user.gmail_token)
         creds = Credentials(
             token=token_data['token'],
@@ -168,7 +171,7 @@ def run_cleanup():
         )
         service = build('gmail', 'v1', credentials=creds)
         results = service.users().messages().list(
-            userId='me', maxResults=50
+            userId='me', maxResults=user.max_emails
         ).execute()
         messages = results.get('messages', [])
         deleted = 0
@@ -179,7 +182,12 @@ def run_cleanup():
             ).execute()
             headers = msg['payload']['headers']
             subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
+            sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown')
             snippet = msg.get('snippet', '')
+            # Check whitelist first
+            if any(w.lower() in sender.lower() for w in whitelist):
+                kept += 1
+                continue
             text = subject + ' ' + snippet
             prediction = model.predict([text])[0]
             if prediction == 1:
@@ -187,7 +195,6 @@ def run_cleanup():
                 deleted += 1
             else:
                 kept += 1
-        # Update stored token in case it was refreshed
         user.gmail_token = json.dumps({
             'token': creds.token,
             'refresh_token': creds.refresh_token,
@@ -201,7 +208,8 @@ def run_cleanup():
     except Exception as e:
         print(f"Cleanup error: {e}")
         return jsonify({'error': str(e)}), 500
-
+    
+    
 @app.route('/classify', methods=['POST'])
 def classify():
     if 'user_id' not in session:
@@ -254,6 +262,48 @@ def reset_password(token):
         db.session.commit()
         return redirect(url_for('login'))
     return render_template('reset_password.html', error=None)
+
+@app.route('/settings', methods=['GET', 'POST'])
+def settings():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    user = db.session.get(User, session['user_id'])
+    if not user:
+        session.clear()
+        return redirect(url_for('login'))
+    
+    if request.method == 'POST':
+        action = request.form.get('action')
+        
+        if action == 'add_whitelist':
+            sender = request.form.get('sender', '').strip()
+            if sender:
+                whitelist = json.loads(user.whitelist or '[]')
+                if sender not in whitelist:
+                    whitelist.append(sender)
+                    user.whitelist = json.dumps(whitelist)
+                    db.session.commit()
+        
+        elif action == 'remove_whitelist':
+            sender = request.form.get('sender', '').strip()
+            whitelist = json.loads(user.whitelist or '[]')
+            if sender in whitelist:
+                whitelist.remove(sender)
+                user.whitelist = json.dumps(whitelist)
+                db.session.commit()
+        
+        elif action == 'update_max':
+            max_emails = int(request.form.get('max_emails', 50))
+            user.max_emails = max_emails
+            db.session.commit()
+        
+        return redirect(url_for('settings'))
+    
+    whitelist = json.loads(user.whitelist or '[]')
+    return render_template('settings.html', 
+                         email=session['user_email'],
+                         whitelist=whitelist,
+                         max_emails=user.max_emails)
 
 if __name__ == '__main__':
     with app.app_context():
