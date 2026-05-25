@@ -102,6 +102,10 @@
     </button>
 </div>
 
+<div id="status-box" class="hidden bg-indigo-600 bg-opacity-20 border border-indigo-500 border-opacity-30 rounded-xl px-4 py-3 text-sm text-indigo-200 mb-6">
+    Running cleanup...
+</div>
+
       <!-- Recent Activity -->
       <div
         class="bg-white bg-opacity-5 border border-white border-opacity-10 rounded-2xl p-8 card-glow"
@@ -116,25 +120,28 @@
     </div>
 
     <script>
-      function runCleanup() {
-        const statusBox = document.getElementById("status-box");
-        statusBox.classList.remove("hidden");
-        statusBox.textContent = "Running cleanup... this may take a moment.";
+     function runCleanup() {
+    const statusBox = document.getElementById('status-box');
+    statusBox.classList.remove('hidden');
+    statusBox.textContent = 'Running cleanup... this may take a minute.';
 
-        fetch("/run_cleanup", { method: "POST" })
-          .then((res) => res.json())
-          .then((data) => {
+    fetch('/run_cleanup', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) {
+                statusBox.textContent = 'Error: ' + data.error;
+                return;
+            }
             statusBox.textContent = `Done! Deleted: ${data.deleted}, Kept: ${data.kept}`;
-            document.getElementById("total-deleted").textContent = data.deleted;
-            document.getElementById("total-kept").textContent = data.kept;
-            document.getElementById("total-cleaned").textContent =
-              data.deleted + data.kept;
-            loadActivity();
-          })
-          .catch(() => {
-            statusBox.textContent = "Something went wrong. Try again.";
-          });
-      }
+            document.getElementById('total-deleted').textContent = data.deleted;
+            document.getElementById('total-kept').textContent = data.kept;
+            document.getElementById('total-cleaned').textContent = data.deleted + data.kept;
+        })
+        .catch(err => {
+            statusBox.textContent = 'Something went wrong. Try again.';
+            console.error(err);
+        });
+}
 
       function loadActivity() {
         fetch("/activity")
