@@ -54,6 +54,14 @@ class User(db.Model):
     whitelist = db.Column(db.Text, nullable=True, default='[]')
     max_emails = db.Column(db.Integer, default=50)
 
+class EmailActivity(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    subject = db.Column(db.String(300), nullable=True)
+    sender = db.Column(db.String(200), nullable=True)
+    action = db.Column(db.String(10), nullable=False)  # 'deleted' or 'kept'
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)    
+
 # Routes
 @app.route('/')
 def home():
@@ -192,9 +200,14 @@ def run_cleanup():
             prediction = model.predict([text])[0]
             if prediction == 1:
                 service.users().messages().trash(userId='me', id=message['id']).execute()
+                activity = EmailActivity(user_id=user.id, subject=subject, sender=sender, action='deleted')
+                db.session.add(activity)
                 deleted += 1
             else:
+                activity = EmailActivity(user_id=user.id, subject=subject, sender=sender, action='kept')
+                db.session.add(activity)
                 kept += 1
+
         user.gmail_token = json.dumps({
             'token': creds.token,
             'refresh_token': creds.refresh_token,
@@ -224,7 +237,11 @@ def classify():
 def activity():
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
-    return jsonify({'emails': []})
+    activities = EmailActivity.query.filter_by(
+        user_id=session['user_id']
+    ).order_by(EmailActivity.timestamp.desc()).limit(20).all()
+    emails = [{'subject': a.subject, 'sender': a.sender, 'label': a.action.capitalize()} for a in activities]
+    return jsonify({'emails': emails})
 
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
