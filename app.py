@@ -115,14 +115,17 @@ def forgot_password():
         email = request.form['email']
         user = User.query.filter_by(email=email).first()
         if user:
-            token = s.dumps(email, salt='password-reset')
-            reset_url = url_for('reset_password', token=token, _external=True)
-            resend.Emails.send({
-                "from": "onboarding@resend.dev",
-                "to": email,
-                "subject": "Reset your Email Agent password",
-                "text": f"Click this link to reset your password: {reset_url}\n\nThis link expires in 1 hour."
-            })
+            try:
+                token = s.dumps(email, salt='password-reset')
+                reset_url = url_for('reset_password', token=token, _external=True)
+                resend.Emails.send({
+                    "from": "onboarding@resend.dev",
+                    "to": email,
+                    "subject": "Reset your Email Agent password",
+                    "text": f"Click this link to reset your password: {reset_url}\n\nThis link expires in 1 hour."
+                })
+            except Exception as e:
+                print(f"Email error: {e}")
         return render_template('forgot_password.html', sent=True)
     return render_template('forgot_password.html', sent=False)
 
