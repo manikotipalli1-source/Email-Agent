@@ -139,6 +139,7 @@
             document.getElementById('total-deleted').textContent = data.deleted;
             document.getElementById('total-kept').textContent = data.kept;
             document.getElementById('total-cleaned').textContent = data.deleted + data.kept;
+            loadActivity(); // reload activity after cleanup
         })
         .catch(err => {
             statusBox.textContent = 'Something went wrong. Try again.';

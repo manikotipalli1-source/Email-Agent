@@ -16,7 +16,7 @@ os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 app.secret_key = os.environ.get('SECRET_KEY', 'your_secret_key_here')
 
 # Database setup
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///emailagent.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///emailagent.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
