@@ -91,13 +91,15 @@ def signup():
 def dashboard():
     if 'user_id' not in session:
         return redirect(url_for('login'))
-    user = User.query.get(session['user_id'])
+    user = db.session.get(User, session['user_id'])
+    if not user:
+        session.clear()
+        return redirect(url_for('login'))
     gmail_connected = user.gmail_email is not None
-    return render_template('dashboard.html', 
+    return render_template('dashboard.html',
                          email=session['user_email'],
                          gmail_connected=gmail_connected,
                          gmail_email=user.gmail_email)
-
 @app.route('/logout')
 def logout():
     session.clear()
@@ -252,3 +254,8 @@ if __name__ == '__main__':
         db.create_all()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
+# Temporary database migration
+with app.app_context():
+    db.drop_all()
+    db.create_all()
