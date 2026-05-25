@@ -112,12 +112,6 @@ def classify():
     result = 'Spam' if prediction == 1 else 'Ham'
     return jsonify({'result': result})
 
-@app.route('/run_cleanup', methods=['POST'])
-def run_cleanup():
-    if 'user_id' not in session:
-        return jsonify({'error': 'Not logged in'}), 401
-    # For now return dummy data - we'll connect real cleanup next
-    return jsonify({'deleted': 0, 'kept': 0})
 
 @app.route('/activity')
 def activity():

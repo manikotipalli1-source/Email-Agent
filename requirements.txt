@@ -2,10 +2,11 @@ Flask==3.0.0
 Flask-SQLAlchemy==3.1.1
 SQLAlchemy==2.0.23
 Werkzeug==3.0.1
-scikit-learn==1.4.2
-numpy==1.26.4
+scikit-learn==1.6.1
+numpy==2.0.0
 gunicorn==21.2.0
-resend==2.0.0
 google-auth-oauthlib==1.2.0
 google-auth-httplib2==0.2.0
 google-api-python-client==2.120.0
+resend==2.0.0
+itsdangerous==2.1.2
