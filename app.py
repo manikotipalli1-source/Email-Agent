@@ -334,6 +334,14 @@ def disconnect_gmail():
         db.session.commit()
     return redirect(url_for('dashboard'))
 
+@app.errorhandler(404)
+def not_found(e):
+    return render_template('404.html'), 404
+
+@app.errorhandler(500)
+def server_error(e):
+    return render_template('500.html'), 500
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
