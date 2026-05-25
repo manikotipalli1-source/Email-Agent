@@ -81,20 +81,26 @@
       </div>
 
       <!-- Action Card -->
-      <div class="flex gap-4">
-        <a
-          href="/connect-gmail"
-          class="bg-white bg-opacity-10 hover:bg-opacity-20 text-white font-semibold px-6 py-3 rounded-xl transition"
-        >
-          Connect Gmail
-        </a>
-        <button
-          onclick="runCleanup()"
-          class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 py-3 rounded-xl transition"
-        >
-          Run Cleanup Now
-        </button>
-      </div>
+      {% if gmail_connected %}
+<div class="bg-green-500 bg-opacity-20 border border-green-500 border-opacity-30 text-green-300 px-4 py-3 rounded-xl mb-6 text-sm">
+    ✓ Connected: {{ gmail_email }}
+</div>
+{% else %}
+<div class="bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 text-yellow-300 px-4 py-3 rounded-xl mb-6 text-sm">
+    Gmail not connected yet. Click Connect Gmail to get started.
+</div>
+{% endif %}
+
+<div class="flex gap-4">
+    <a href="/connect-gmail"
+        class="bg-white bg-opacity-10 hover:bg-opacity-20 text-white font-semibold px-6 py-3 rounded-xl transition">
+        {% if gmail_connected %}Reconnect Gmail{% else %}Connect Gmail{% endif %}
+    </a>
+    <button onclick="runCleanup()"
+        class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 py-3 rounded-xl transition">
+        Run Cleanup Now
+    </button>
+</div>
 
       <!-- Recent Activity -->
       <div
