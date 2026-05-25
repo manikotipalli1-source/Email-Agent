@@ -11,6 +11,7 @@ import resend
 from itsdangerous import URLSafeTimedSerializer
 
 app = Flask(__name__)
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 app.secret_key = os.environ.get('SECRET_KEY', 'your_secret_key_here')
 
 # Database setup
@@ -121,8 +122,10 @@ def connect_gmail():
 @app.route('/oauth2callback')
 def oauth2callback():
     try:
+        # Fix for HTTPS redirect
+        auth_response = request.url.replace('http://', 'https://')
         flow = get_gmail_flow()
-        flow.fetch_token(authorization_response=request.url)
+        flow.fetch_token(authorization_response=auth_response)
         credentials = flow.credentials
         token_data = {
             'token': credentials.token,
@@ -132,17 +135,20 @@ def oauth2callback():
             'client_secret': credentials.client_secret,
             'scopes': list(credentials.scopes) if credentials.scopes else []
         }
-        user = User.query.get(session['user_id'])
+        user = db.session.get(User, session['user_id'])
+        if not user:
+            return redirect(url_for('login'))
         user.gmail_token = json.dumps(token_data)
         service = build('gmail', 'v1', credentials=credentials)
         profile = service.users().getProfile(userId='me').execute()
         user.gmail_email = profile['emailAddress']
         db.session.commit()
+        print(f"Gmail connected for user: {user.gmail_email}")
         return redirect(url_for('dashboard'))
     except Exception as e:
         print(f"OAuth error: {e}")
         return redirect(url_for('dashboard'))
-
+    
 @app.route('/run_cleanup', methods=['POST'])
 def run_cleanup():
     if 'user_id' not in session:
