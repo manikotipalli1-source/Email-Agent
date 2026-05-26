@@ -1,129 +1,5 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Email Agent - Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link
-      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
-    <style>
-      body {
-        font-family: "Space Grotesk", sans-serif;
-      }
-      .gradient-bg {
-        background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
-      }
-      .card-glow {
-        box-shadow: 0 0 40px rgba(99, 102, 241, 0.15);
-      }
-    </style>
-  </head>
-  <body class="gradient-bg min-h-screen text-white">
-    <!-- Navbar -->
-    <nav class="border-b border-white border-opacity-10 px-6 py-4">
-      <div class="max-w-6xl mx-auto flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <div
-            class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center"
-          >
-            <svg
-              class="w-5 h-5 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-              />
-            </svg>
-          </div>
-          <span class="font-bold text-lg">Email Agent</span>
-        </div>
-        <div class="flex items-center gap-4">
-          <span class="text-indigo-300 text-sm">{{ email }}</span>
-          <a
-            href="/logout"
-            class="text-sm bg-white bg-opacity-10 hover:bg-opacity-20 px-4 py-2 rounded-xl transition"
-            >Logout
-          </a>
-
-          <a href="/settings" class="text-sm bg-white bg-opacity-10 hover:bg-opacity-20 px-4 py-2 rounded-xl transition">Settings</a>
-          
-        </div>
-      </div>
-    </nav>
-
-    <!-- Main Content -->
-    <div class="max-w-6xl mx-auto px-6 py-10">
-      <!-- Stats Row -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-        <div
-          class="bg-white bg-opacity-5 border border-white border-opacity-10 rounded-2xl p-6 card-glow"
-        >
-          <p class="text-indigo-300 text-sm mb-1">Total Cleaned</p>
-          <p class="text-4xl font-bold" id="total-cleaned">--</p>
-        </div>
-        <div
-          class="bg-white bg-opacity-5 border border-white border-opacity-10 rounded-2xl p-6 card-glow"
-        >
-          <p class="text-indigo-300 text-sm mb-1">Deleted</p>
-          <p class="text-4xl font-bold text-red-400" id="total-deleted">--</p>
-        </div>
-        <div
-          class="bg-white bg-opacity-5 border border-white border-opacity-10 rounded-2xl p-6 card-glow"
-        >
-          <p class="text-indigo-300 text-sm mb-1">Kept</p>
-          <p class="text-4xl font-bold text-green-400" id="total-kept">--</p>
-        </div>
-      </div>
-
-      <!-- Action Card -->
-      {% if gmail_connected %}
-<div class="bg-green-500 bg-opacity-20 border border-green-500 border-opacity-30 text-green-300 px-4 py-3 rounded-xl mb-6 text-sm">
-    ✓ Connected: {{ gmail_email }}
-</div>
-{% else %}
-<div class="bg-yellow-500 bg-opacity-20 border border-yellow-500 border-opacity-30 text-yellow-300 px-4 py-3 rounded-xl mb-6 text-sm">
-    Gmail not connected yet. Click Connect Gmail to get started.
-</div>
-{% endif %}
-
-<div class="flex gap-4">
-    <a href="/connect-gmail"
-        class="bg-white bg-opacity-10 hover:bg-opacity-20 text-white font-semibold px-6 py-3 rounded-xl transition">
-        {% if gmail_connected %}Reconnect Gmail{% else %}Connect Gmail{% endif %}
-    </a>
-    <button onclick="runCleanup()"
-        class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 py-3 rounded-xl transition">
-        Run Cleanup Now
-    </button>
-</div>
-
-<div id="status-box" class="hidden bg-indigo-600 bg-opacity-20 border border-indigo-500 border-opacity-30 rounded-xl px-4 py-3 text-sm text-indigo-200 mb-6">
-    Running cleanup...
-</div>
-
-      <!-- Recent Activity -->
-      <div
-        class="bg-white bg-opacity-5 border border-white border-opacity-10 rounded-2xl p-8 card-glow"
-      >
-        <h2 class="text-xl font-bold mb-6">Recent Activity</h2>
-        <div id="activity-list">
-          <p class="text-indigo-300 text-sm">
-            No activity yet. Run a cleanup to get started.
-          </p>
-        </div>
-      </div>
-    </div>
-
-    <script>
-     function runCleanup() {
+<script>
+function runCleanup() {
     const statusBox = document.getElementById('status-box');
     statusBox.classList.remove('hidden');
     statusBox.textContent = 'Running cleanup... this may take a minute.';
@@ -139,7 +15,7 @@
             document.getElementById('total-deleted').textContent = data.deleted;
             document.getElementById('total-kept').textContent = data.kept;
             document.getElementById('total-cleaned').textContent = data.deleted + data.kept;
-            loadActivity(); // reload activity after cleanup
+            loadActivity();
         })
         .catch(err => {
             statusBox.textContent = 'Something went wrong. Try again.';
@@ -147,7 +23,7 @@
         });
 }
 
-      function loadActivity() {
+function loadActivity() {
     fetch('/activity')
         .then(res => res.json())
         .then(data => {
@@ -156,6 +32,7 @@
                 list.innerHTML = '<p class="text-indigo-300 text-sm">No activity yet. Run a cleanup to see results here.</p>';
                 return;
             }
+            window.activityData = data.emails;
             list.innerHTML = data.emails.map((e, index) => `
                 <div class="flex items-center justify-between py-3 border-b border-white border-opacity-5 last:border-0">
                     <div class="flex-1 mr-4">
@@ -173,9 +50,6 @@
                     </div>
                 </div>
             `).join('');
-            
-            // Store emails data globally for feedback
-            window.activityData = data.emails;
         });
 }
 
@@ -193,32 +67,18 @@ function sendFeedback(index) {
     })
     .then(res => res.json())
     .then(data => {
-        if (data.success) {
-            alert('Thanks for the feedback! Your model will improve.');
+        if (data.retrained) {
+            alert('Your personal model has been retrained and is now smarter!');
+        } else {
+            const needed = Math.max(0, 5 - data.feedback_count);
+            if (needed > 0) {
+                alert(`Feedback saved! ${needed} more corrections needed to train your personal model.`);
+            } else {
+                alert('Feedback saved! Your personal model is learning.');
+            }
         }
     });
 }
 
-function sendFeedback(subject, sender, originalAction, correctAction) {
-    fetch('/feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            subject: subject,
-            sender: sender,
-            original_action: originalAction,
-            correct_action: correctAction
-        })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.success) {
-            alert('Thanks for the feedback! Your model will improve.');
-        }
-    });
-}
-
-      loadActivity();
-    </script>
-  </body>
-</html>
+loadActivity();
+</script>

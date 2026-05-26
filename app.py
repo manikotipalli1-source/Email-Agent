@@ -4,12 +4,16 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.pipeline import Pipeline
+from datetime import datetime
+from itsdangerous import URLSafeTimedSerializer
 import pickle
 import os
 import json
 import resend
-from itsdangerous import URLSafeTimedSerializer
-from datetime import datetime
+import io
 
 app = Flask(__name__)
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
@@ -54,14 +58,15 @@ class User(db.Model):
     gmail_email = db.Column(db.String(150), nullable=True)
     whitelist = db.Column(db.Text, nullable=True, default='[]')
     max_emails = db.Column(db.Integer, default=50)
+    personal_model = db.Column(db.LargeBinary, nullable=True)
 
 class EmailActivity(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     subject = db.Column(db.String(300), nullable=True)
     sender = db.Column(db.String(200), nullable=True)
-    action = db.Column(db.String(10), nullable=False)  # 'deleted' or 'kept'
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)    
+    action = db.Column(db.String(10), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
 class Feedback(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -70,7 +75,46 @@ class Feedback(db.Model):
     sender = db.Column(db.String(200), nullable=True)
     original_action = db.Column(db.String(10), nullable=False)
     correct_action = db.Column(db.String(10), nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)    
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+# Personal model retraining - defined AFTER models
+def retrain_user_model(user_id):
+    feedbacks = Feedback.query.filter_by(user_id=user_id).all()
+    activities = EmailActivity.query.filter_by(user_id=user_id).all()
+    total_data = len(feedbacks) + len(activities)
+    if total_data < 20:
+        return False
+
+    texts = []
+    labels = []
+
+    for a in activities:
+        text = (a.subject or '') + ' ' + (a.sender or '')
+        texts.append(text)
+        labels.append(1 if a.action == 'deleted' else 0)
+
+    for f in feedbacks:
+        text = (f.subject or '') + ' ' + (f.sender or '')
+        texts.append(text)
+        texts.append(text)
+        labels.append(1 if f.correct_action == 'deleted' else 0)
+        labels.append(1 if f.correct_action == 'deleted' else 0)
+
+    personal_model = Pipeline([
+        ('tfidf', TfidfVectorizer(max_features=1000)),
+        ('clf', MultinomialNB())
+    ])
+    personal_model.fit(texts, labels)
+
+    model_bytes = io.BytesIO()
+    pickle.dump(personal_model, model_bytes)
+    model_bytes.seek(0)
+
+    user = db.session.get(User, user_id)
+    user.personal_model = model_bytes.read()
+    db.session.commit()
+    print(f"Personal model retrained for user {user_id} with {total_data} examples")
+    return True
 
 # Routes
 @app.route('/')
@@ -117,10 +161,17 @@ def dashboard():
         session.clear()
         return redirect(url_for('login'))
     gmail_connected = user.gmail_email is not None
+    has_personal_model = user.personal_model is not None
+    feedback_count = Feedback.query.filter_by(user_id=user.id).count()
+    activity_count = EmailActivity.query.filter_by(user_id=user.id).count()
     return render_template('dashboard.html',
                          email=session['user_email'],
                          gmail_connected=gmail_connected,
-                         gmail_email=user.gmail_email)
+                         gmail_email=user.gmail_email,
+                         has_personal_model=has_personal_model,
+                         feedback_count=feedback_count,
+                         activity_count=activity_count)
+
 @app.route('/logout')
 def logout():
     session.clear()
@@ -142,7 +193,6 @@ def connect_gmail():
 @app.route('/oauth2callback')
 def oauth2callback():
     try:
-        # Fix for HTTPS redirect
         auth_response = request.url.replace('http://', 'https://')
         flow = get_gmail_flow()
         flow.fetch_token(authorization_response=auth_response)
@@ -163,12 +213,11 @@ def oauth2callback():
         profile = service.users().getProfile(userId='me').execute()
         user.gmail_email = profile['emailAddress']
         db.session.commit()
-        print(f"Gmail connected for user: {user.gmail_email}")
         return redirect(url_for('dashboard'))
     except Exception as e:
         print(f"OAuth error: {e}")
         return redirect(url_for('dashboard'))
-    
+
 @app.route('/run_cleanup', methods=['POST'])
 def run_cleanup():
     if 'user_id' not in session:
@@ -187,6 +236,13 @@ def run_cleanup():
             client_secret=token_data['client_secret'],
             scopes=token_data.get('scopes', [])
         )
+
+        # Use personal model if available
+        user_model = model
+        if user.personal_model:
+            user_model = pickle.loads(user.personal_model)
+            print(f"Using personal model for user {user.id}")
+
         service = build('gmail', 'v1', credentials=creds)
         results = service.users().messages().list(
             userId='me', maxResults=user.max_emails
@@ -194,6 +250,7 @@ def run_cleanup():
         messages = results.get('messages', [])
         deleted = 0
         kept = 0
+
         for message in messages:
             msg = service.users().messages().get(
                 userId='me', id=message['id'], format='full'
@@ -202,12 +259,16 @@ def run_cleanup():
             subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
             sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown')
             snippet = msg.get('snippet', '')
-            # Check whitelist first
+
             if any(w.lower() in sender.lower() for w in whitelist):
+                activity = EmailActivity(user_id=user.id, subject=subject, sender=sender, action='kept')
+                db.session.add(activity)
                 kept += 1
                 continue
+
             text = subject + ' ' + snippet
-            prediction = model.predict([text])[0]
+            prediction = user_model.predict([text])[0]
+
             if prediction == 1:
                 service.users().messages().trash(userId='me', id=message['id']).execute()
                 activity = EmailActivity(user_id=user.id, subject=subject, sender=sender, action='deleted')
@@ -231,7 +292,6 @@ def run_cleanup():
     except Exception as e:
         print(f"Cleanup error: {e}")
         return jsonify({'error': str(e)}), 500
-    
 
 @app.route('/classify', methods=['POST'])
 def classify():
@@ -247,11 +307,44 @@ def classify():
 def activity():
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
+    user = db.session.get(User, session['user_id'])
+    if not user:
+        return jsonify({'emails': []})
     activities = EmailActivity.query.filter_by(
         user_id=session['user_id']
-    ).order_by(EmailActivity.timestamp.desc()).limit(50).all()
+    ).order_by(EmailActivity.timestamp.desc()).limit(user.max_emails).all()
     emails = [{'subject': a.subject, 'sender': a.sender, 'label': a.action.capitalize()} for a in activities]
     return jsonify({'emails': emails})
+
+@app.route('/feedback', methods=['POST'])
+def feedback():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    data = request.json
+    fb = Feedback(
+        user_id=session['user_id'],
+        subject=data.get('subject'),
+        sender=data.get('sender'),
+        original_action=data.get('original_action'),
+        correct_action=data.get('correct_action')
+    )
+    db.session.add(fb)
+    db.session.commit()
+
+    feedback_count = Feedback.query.filter_by(user_id=session['user_id']).count()
+    activity_count = EmailActivity.query.filter_by(user_id=session['user_id']).count()
+    total = feedback_count + activity_count
+
+    retrained = False
+    if feedback_count >= 5 and feedback_count % 5 == 0:
+        retrained = retrain_user_model(session['user_id'])
+
+    return jsonify({
+        'success': True,
+        'retrained': retrained,
+        'feedback_count': feedback_count,
+        'total_data': total
+    })
 
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
@@ -298,10 +391,9 @@ def settings():
     if not user:
         session.clear()
         return redirect(url_for('login'))
-    
+
     if request.method == 'POST':
         action = request.form.get('action')
-        
         if action == 'add_whitelist':
             sender = request.form.get('sender', '').strip()
             if sender:
@@ -310,7 +402,6 @@ def settings():
                     whitelist.append(sender)
                     user.whitelist = json.dumps(whitelist)
                     db.session.commit()
-        
         elif action == 'remove_whitelist':
             sender = request.form.get('sender', '').strip()
             whitelist = json.loads(user.whitelist or '[]')
@@ -318,16 +409,14 @@ def settings():
                 whitelist.remove(sender)
                 user.whitelist = json.dumps(whitelist)
                 db.session.commit()
-        
         elif action == 'update_max':
             max_emails = int(request.form.get('max_emails', 50))
             user.max_emails = max_emails
             db.session.commit()
-        
         return redirect(url_for('settings'))
-    
+
     whitelist = json.loads(user.whitelist or '[]')
-    return render_template('settings.html', 
+    return render_template('settings.html',
                          email=session['user_email'],
                          whitelist=whitelist,
                          max_emails=user.max_emails)
@@ -351,25 +440,8 @@ def not_found(e):
 def server_error(e):
     return render_template('500.html'), 500
 
-@app.route('/feedback', methods=['POST'])
-def feedback():
-    if 'user_id' not in session:
-        return jsonify({'error': 'Not logged in'}), 401
-    data = request.json
-    feedback = Feedback(
-        user_id=session['user_id'],
-        subject=data.get('subject'),
-        sender=data.get('sender'),
-        original_action=data.get('original_action'),
-        correct_action=data.get('correct_action')
-    )
-    db.session.add(feedback)
-    db.session.commit()
-    return jsonify({'success': True})
-
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
-
