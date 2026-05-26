@@ -156,24 +156,47 @@
                 list.innerHTML = '<p class="text-indigo-300 text-sm">No activity yet. Run a cleanup to see results here.</p>';
                 return;
             }
-            list.innerHTML = data.emails.map(e => `
+            list.innerHTML = data.emails.map((e, index) => `
                 <div class="flex items-center justify-between py-3 border-b border-white border-opacity-5 last:border-0">
-                    <div class="flex-1">
+                    <div class="flex-1 mr-4">
                         <p class="text-sm font-medium">${e.subject || 'No Subject'}</p>
                         <p class="text-xs text-indigo-300">${e.sender || 'Unknown'}</p>
                     </div>
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2 shrink-0">
                         <span class="text-xs px-3 py-1 rounded-full ${e.label === 'Deleted' ? 'bg-red-500 bg-opacity-20 text-red-300' : 'bg-green-500 bg-opacity-20 text-green-300'}">
                             ${e.label}
                         </span>
-                        <button onclick="sendFeedback('${(e.subject || '').replace(/'/g, "\\'")}', '${(e.sender || '').replace(/'/g, "\\'")}', '${e.label.toLowerCase()}', '${e.label === 'Deleted' ? 'kept' : 'deleted'}')"
+                        <button onclick="sendFeedback(${index})"
                             class="text-xs bg-white bg-opacity-10 hover:bg-opacity-20 px-2 py-1 rounded-lg transition text-yellow-300">
                             ✗ Wrong
                         </button>
                     </div>
                 </div>
             `).join('');
+            
+            // Store emails data globally for feedback
+            window.activityData = data.emails;
         });
+}
+
+function sendFeedback(index) {
+    const e = window.activityData[index];
+    fetch('/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            subject: e.subject,
+            sender: e.sender,
+            original_action: e.label.toLowerCase(),
+            correct_action: e.label === 'Deleted' ? 'kept' : 'deleted'
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            alert('Thanks for the feedback! Your model will improve.');
+        }
+    });
 }
 
 function sendFeedback(subject, sender, originalAction, correctAction) {

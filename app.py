@@ -249,7 +249,7 @@ def activity():
         return jsonify({'error': 'Not logged in'}), 401
     activities = EmailActivity.query.filter_by(
         user_id=session['user_id']
-    ).order_by(EmailActivity.timestamp.desc()).limit(20).all()
+    ).order_by(EmailActivity.timestamp.desc()).limit(50).all()
     emails = [{'subject': a.subject, 'sender': a.sender, 'label': a.action.capitalize()} for a in activities]
     return jsonify({'emails': emails})
 
