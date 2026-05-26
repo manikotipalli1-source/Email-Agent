@@ -158,16 +158,41 @@
             }
             list.innerHTML = data.emails.map(e => `
                 <div class="flex items-center justify-between py-3 border-b border-white border-opacity-5 last:border-0">
-                    <div>
+                    <div class="flex-1">
                         <p class="text-sm font-medium">${e.subject || 'No Subject'}</p>
                         <p class="text-xs text-indigo-300">${e.sender || 'Unknown'}</p>
                     </div>
-                    <span class="text-xs px-3 py-1 rounded-full ${e.label === 'Deleted' ? 'bg-red-500 bg-opacity-20 text-red-300' : 'bg-green-500 bg-opacity-20 text-green-300'}">
-                        ${e.label}
-                    </span>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs px-3 py-1 rounded-full ${e.label === 'Deleted' ? 'bg-red-500 bg-opacity-20 text-red-300' : 'bg-green-500 bg-opacity-20 text-green-300'}">
+                            ${e.label}
+                        </span>
+                        <button onclick="sendFeedback('${(e.subject || '').replace(/'/g, "\\'")}', '${(e.sender || '').replace(/'/g, "\\'")}', '${e.label.toLowerCase()}', '${e.label === 'Deleted' ? 'kept' : 'deleted'}')"
+                            class="text-xs bg-white bg-opacity-10 hover:bg-opacity-20 px-2 py-1 rounded-lg transition text-yellow-300">
+                            ✗ Wrong
+                        </button>
+                    </div>
                 </div>
             `).join('');
         });
+}
+
+function sendFeedback(subject, sender, originalAction, correctAction) {
+    fetch('/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            subject: subject,
+            sender: sender,
+            original_action: originalAction,
+            correct_action: correctAction
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            alert('Thanks for the feedback! Your model will improve.');
+        }
+    });
 }
 
       loadActivity();

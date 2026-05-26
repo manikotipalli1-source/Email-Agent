@@ -63,6 +63,15 @@ class EmailActivity(db.Model):
     action = db.Column(db.String(10), nullable=False)  # 'deleted' or 'kept'
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)    
 
+class Feedback(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    subject = db.Column(db.String(300), nullable=True)
+    sender = db.Column(db.String(200), nullable=True)
+    original_action = db.Column(db.String(10), nullable=False)
+    correct_action = db.Column(db.String(10), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)    
+
 # Routes
 @app.route('/')
 def home():
@@ -341,6 +350,22 @@ def not_found(e):
 @app.errorhandler(500)
 def server_error(e):
     return render_template('500.html'), 500
+
+@app.route('/feedback', methods=['POST'])
+def feedback():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    data = request.json
+    feedback = Feedback(
+        user_id=session['user_id'],
+        subject=data.get('subject'),
+        sender=data.get('sender'),
+        original_action=data.get('original_action'),
+        correct_action=data.get('correct_action')
+    )
+    db.session.add(feedback)
+    db.session.commit()
+    return jsonify({'success': True})
 
 if __name__ == '__main__':
     with app.app_context():
